@@ -2,28 +2,30 @@
 <html lang="fr">
 <head>
   <meta charset="UTF-8">
-  <title>Éditeur PKPass (Local)</title>
+  <title>Modifier un PKPass</title>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
   <style>
     body { font-family: Arial, sans-serif; padding: 20px; max-width: 800px; margin: auto; }
-    input, textarea, button { margin: 10px 0; width: 100%; padding: 10px; font-size: 1em; }
-    textarea { height: 300px; font-family: monospace; }
+    label { font-weight: bold; display: block; margin-top: 10px; }
+    input, button { padding: 10px; font-size: 1em; width: 100%; margin-top: 5px; }
+    .field { margin-bottom: 15px; }
   </style>
 </head>
 <body>
-  <h2>Éditeur de fichier .pkpass (sans serveur)</h2>
+  <h2>Éditeur .pkpass (auto-form)</h2>
   <input type="file" id="fileInput" accept=".pkpass" />
-  <textarea id="jsonEditor" placeholder="pass.json apparaîtra ici..."></textarea>
+  <div id="formContainer"></div>
   <button onclick="savePkpass()">Télécharger le PKPass modifié</button>
 
   <script>
     let zipInstance;
     let originalFiles = {};
+    let passJson = {};
 
     document.getElementById('fileInput').addEventListener('change', async function () {
       const file = this.files[0];
       if (!file || !file.name.endsWith(".pkpass")) {
-        alert("Veuillez sélectionner un fichier .pkpass valide.");
+        alert("Veuillez sélectionner un fichier .pkpass.");
         return;
       }
 
@@ -41,8 +43,42 @@
       }
 
       const jsonContent = await originalFiles['pass.json'].async("string");
-      document.getElementById("jsonEditor").value = jsonContent;
+      passJson = JSON.parse(jsonContent);
+      afficherFormulaire(passJson);
     });
+
+    function afficherFormulaire(json) {
+      const container = document.getElementById("formContainer");
+      container.innerHTML = "";
+
+      const champs = [
+        { key: "logoText", label: "Texte du logo" },
+        { key: "description", label: "Description" },
+        { key: "organizationName", label: "Organisation" }
+      ];
+
+      champs.forEach(field => {
+        if (json[field.key] !== undefined) {
+          container.innerHTML += `
+            <div class="field">
+              <label>${field.label}</label>
+              <input type="text" id="${field.key}" value="${json[field.key]}">
+            </div>`;
+        }
+      });
+
+      // Gérer les primaryFields s’ils existent
+      if (json.generic?.primaryFields?.length) {
+        json.generic.primaryFields.forEach((item, index) => {
+          const fieldId = `primaryField_${index}`;
+          container.innerHTML += `
+            <div class="field">
+              <label>${item.label || item.key}</label>
+              <input type="text" id="${fieldId}" value="${item.value}">
+            </div>`;
+        });
+      }
+    }
 
     async function savePkpass() {
       if (!zipInstance || !originalFiles['pass.json']) {
@@ -50,12 +86,18 @@
         return;
       }
 
-      let editedJson;
-      try {
-        editedJson = JSON.parse(document.getElementById("jsonEditor").value);
-      } catch (e) {
-        alert("JSON invalide !");
-        return;
+      // Maj des champs de base
+      ["logoText", "description", "organizationName"].forEach(key => {
+        const input = document.getElementById(key);
+        if (input) passJson[key] = input.value;
+      });
+
+      // Maj des primaryFields
+      if (passJson.generic?.primaryFields?.length) {
+        passJson.generic.primaryFields.forEach((item, index) => {
+          const input = document.getElementById(`primaryField_${index}`);
+          if (input) item.value = input.value;
+        });
       }
 
       const newZip = new JSZip();
@@ -65,7 +107,7 @@
         newZip.file(path, data);
       }
 
-      newZip.file("pass.json", JSON.stringify(editedJson, null, 2));
+      newZip.file("pass.json", JSON.stringify(passJson, null, 2));
 
       newZip.generateAsync({ type: "blob" }).then(content => {
         const a = document.createElement("a");
