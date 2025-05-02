@@ -1,148 +1,131 @@
 <!DOCTYPE html>
 <html lang="fr">
 <head>
-  <meta charset="UTF-8" />
-  <title>Pass Designer - Générez votre Pass</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta charset="UTF-8">
+  <title>Éditeur de PKPass (100% Frontend)</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
   <style>
-    :root {
-      --primary: #007aff;
-      --bg: #f6f8fc;
-      --card: #ffffff;
-      --text: #1f2937;
-      --accent: #f1f5f9;
-    }
-
     body {
-      margin: 0;
-      padding: 0;
-      font-family: 'Segoe UI', sans-serif;
-      background-color: var(--bg);
-      color: var(--text);
-    }
-
-    .brand {
-      text-align: center;
-      padding: 2rem 1rem 1rem;
-    }
-
-    .brand h1 {
-      font-size: 2rem;
-      margin-bottom: 0.2rem;
-      color: var(--primary);
-    }
-
-    .brand p {
-      font-size: 1rem;
-      color: #555;
-    }
-
-    .form-container {
-      background: var(--card);
-      max-width: 480px;
-      margin: 2rem auto;
+      font-family: sans-serif;
+      background: #f3f4f6;
       padding: 2rem;
-      border-radius: 12px;
-      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.06);
+      max-width: 700px;
+      margin: auto;
     }
-
-    .form-group {
-      margin-bottom: 1.4rem;
+    h2 {
+      margin-top: 1.5rem;
     }
-
-    .form-group label {
+    input[type="file"] {
+      margin-bottom: 1rem;
+    }
+    .field {
+      margin-bottom: 1rem;
+    }
+    .field label {
       display: block;
-      font-weight: 600;
-      margin-bottom: 0.4rem;
+      font-weight: bold;
+      margin-bottom: 0.3rem;
     }
-
-    .form-group input {
+    .field input {
       width: 100%;
-      padding: 0.8rem;
-      font-size: 1rem;
+      padding: 0.6rem;
       border: 1px solid #ccc;
       border-radius: 6px;
-      background: var(--accent);
     }
-
-    .cta-button {
-      width: 100%;
-      padding: 1rem;
-      font-size: 1rem;
-      background: var(--primary);
+    button {
+      padding: 0.7rem 1.2rem;
+      background: #007aff;
       color: white;
       border: none;
-      border-radius: 8px;
+      border-radius: 6px;
       cursor: pointer;
-      transition: background 0.2s ease;
     }
-
-    .cta-button:hover {
+    button:hover {
       background: #005fd1;
     }
-
-    footer {
-      text-align: center;
-      padding: 2rem 1rem;
-      font-size: 0.9rem;
-      color: #999;
-    }
-
-    @media (max-width: 500px) {
-      .form-container {
-        margin: 1rem;
-        padding: 1.5rem;
-      }
+    #form-area {
+      background: white;
+      padding: 1.5rem;
+      border-radius: 8px;
+      box-shadow: 0 0 10px rgba(0,0,0,0.05);
     }
   </style>
 </head>
 <body>
 
-  <!-- 💎 Branding -->
-  <header class="brand">
-    <h1>Pass Designer</h1>
-    <p>Générez votre carte PKPass personnalisée en quelques secondes</p>
-  </header>
+  <h1>🧾 Éditeur de PKPass (100% Frontend)</h1>
+  <p>Charge un fichier `.pkpass`, modifie les champs, puis télécharge ta version personnalisée sans aucun serveur.</p>
 
-  <!-- 🧾 Formulaire -->
-  <form class="form-container" action="#" method="POST">
-    <!-- 🎯 Champ Nom -->
-    <div class="form-group">
-      <label for="nom">Nom complet</label>
-      <input type="text" id="nom" name="nom" value="Jean Dupont" />
-    </div>
+  <input type="file" id="fileInput" accept=".pkpass" />
+  <div id="form-area"></div>
+  <button id="downloadBtn" style="display:none">📦 Télécharger le nouveau PKPass</button>
 
-    <!-- 🎯 Champ Email -->
-    <div class="form-group">
-      <label for="email">Adresse e-mail</label>
-      <input type="email" id="email" name="email" value="jean@example.com" />
-    </div>
+  <script>
+    let zip, originalZipContent = {};
+    let passJson = {};
+    
+    document.getElementById("fileInput").addEventListener("change", async function (e) {
+      const file = e.target.files[0];
+      if (!file || !file.name.endsWith(".pkpass")) {
+        alert("Fichier invalide. Choisis un fichier .pkpass");
+        return;
+      }
 
-    <!-- 🎯 Champ Événement -->
-    <div class="form-group">
-      <label for="event">Événement</label>
-      <input type="text" id="event" name="event" value="Concert Live 2025" />
-    </div>
+      zip = await JSZip.loadAsync(file);
+      if (!zip.files["pass.json"]) {
+        alert("Ce fichier ne contient pas de pass.json");
+        return;
+      }
 
-    <!-- 🎯 Champ Date -->
-    <div class="form-group">
-      <label for="date">Date</label>
-      <input type="date" id="date" name="date" value="2025-06-15" />
-    </div>
+      // Stocker tous les fichiers d’origine
+      for (const filename in zip.files) {
+        if (filename !== "pass.json") {
+          originalZipContent[filename] = await zip.files[filename].async("uint8array");
+        }
+      }
 
-    <!-- 🎯 Champ Lieu -->
-    <div class="form-group">
-      <label for="lieu">Lieu</label>
-      <input type="text" id="lieu" name="lieu" value="Stade de France" />
-    </div>
+      const jsonText = await zip.files["pass.json"].async("string");
+      passJson = JSON.parse(jsonText);
+      buildForm(passJson);
+    });
 
-    <!-- CTA -->
-    <button class="cta-button" type="submit">🎟 Générer mon PKPass</button>
-  </form>
+    function buildForm(data) {
+      const formArea = document.getElementById("form-area");
+      formArea.innerHTML = '<h2>✏️ Modifier le contenu</h2>';
+      for (const key in data) {
+        if (typeof data[key] === "string") {
+          const field = document.createElement("div");
+          field.className = "field";
+          field.innerHTML = `
+            <label for="${key}">${key}</label>
+            <input type="text" name="${key}" id="${key}" value="${data[key]}" />
+          `;
+          formArea.appendChild(field);
+        }
+      }
+      document.getElementById("downloadBtn").style.display = "inline-block";
+    }
 
-  <footer>
-    © 2025 Pass Designer. Tous droits réservés.
-  </footer>
+    document.getElementById("downloadBtn").addEventListener("click", async () => {
+      // Mettre à jour pass.json avec les champs modifiés
+      for (const key in passJson) {
+        const input = document.getElementById(key);
+        if (input) passJson[key] = input.value;
+      }
 
+      const newZip = new JSZip();
+      newZip.file("pass.json", JSON.stringify(passJson, null, 2));
+
+      for (const filename in originalZipContent) {
+        newZip.file(filename, originalZipContent[filename]);
+      }
+
+      const blob = await newZip.generateAsync({ type: "blob" });
+      const link = document.createElement("a");
+      link.href = URL.createObjectURL(blob);
+      link.download = "pkpass_modifié.pkpass";
+      link.click();
+    });
+  </script>
 </body>
 </html>
