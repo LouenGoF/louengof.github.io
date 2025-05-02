@@ -2,16 +2,78 @@
 <html lang="fr">
 <head>
   <meta charset="UTF-8">
-  <title>Générateur de PKPass</title>
-  <link rel="stylesheet" href="style.css" />
+  <title>Éditeur PKPass (Local)</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+  <style>
+    body { font-family: Arial, sans-serif; padding: 20px; max-width: 800px; margin: auto; }
+    input, textarea, button { margin: 10px 0; width: 100%; padding: 10px; font-size: 1em; }
+    textarea { height: 300px; font-family: monospace; }
+  </style>
 </head>
 <body>
-  <div class="container">
-    <h2>Générer un PKPass</h2>
-    <input type="text" id="nom" placeholder="Entrez votre nom" />
-    <button onclick="genererPass()">Générer</button>
-    <p id="msg"></p>
-  </div>
-  <script src="script.js"></script>
+  <h2>Éditeur de fichier .pkpass (sans serveur)</h2>
+  <input type="file" id="fileInput" accept=".pkpass" />
+  <textarea id="jsonEditor" placeholder="pass.json apparaîtra ici..."></textarea>
+  <button onclick="savePkpass()">Télécharger le PKPass modifié</button>
+
+  <script>
+    let zipInstance;
+    let originalFiles = {};
+
+    document.getElementById('fileInput').addEventListener('change', async function () {
+      const file = this.files[0];
+      if (!file || !file.name.endsWith(".pkpass")) {
+        alert("Veuillez sélectionner un fichier .pkpass valide.");
+        return;
+      }
+
+      const arrayBuffer = await file.arrayBuffer();
+      zipInstance = await JSZip.loadAsync(arrayBuffer);
+
+      originalFiles = {};
+      zipInstance.forEach((relativePath, file) => {
+        originalFiles[relativePath] = file;
+      });
+
+      if (!originalFiles['pass.json']) {
+        alert("Ce fichier .pkpass ne contient pas de pass.json !");
+        return;
+      }
+
+      const jsonContent = await originalFiles['pass.json'].async("string");
+      document.getElementById("jsonEditor").value = jsonContent;
+    });
+
+    async function savePkpass() {
+      if (!zipInstance || !originalFiles['pass.json']) {
+        alert("Aucun pass chargé !");
+        return;
+      }
+
+      let editedJson;
+      try {
+        editedJson = JSON.parse(document.getElementById("jsonEditor").value);
+      } catch (e) {
+        alert("JSON invalide !");
+        return;
+      }
+
+      const newZip = new JSZip();
+      for (let path in originalFiles) {
+        if (path === "pass.json") continue;
+        const data = await originalFiles[path].async("uint8array");
+        newZip.file(path, data);
+      }
+
+      newZip.file("pass.json", JSON.stringify(editedJson, null, 2));
+
+      newZip.generateAsync({ type: "blob" }).then(content => {
+        const a = document.createElement("a");
+        a.href = URL.createObjectURL(content);
+        a.download = "modifié.pkpass";
+        a.click();
+      });
+    }
+  </script>
 </body>
 </html>
