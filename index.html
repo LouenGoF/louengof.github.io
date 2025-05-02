@@ -2,18 +2,18 @@
 <html lang="fr">
 <head>
   <meta charset="UTF-8">
-  <title>Éditeur de PKPass (100% Frontend)</title>
+  <title>Éditeur de PKPass (Complet)</title>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
   <style>
     body {
       font-family: sans-serif;
       background: #f3f4f6;
       padding: 2rem;
-      max-width: 700px;
+      max-width: 800px;
       margin: auto;
     }
     h2 {
-      margin-top: 1.5rem;
+      margin-top: 2rem;
     }
     input[type="file"] {
       margin-bottom: 1rem;
@@ -53,17 +53,17 @@
 </head>
 <body>
 
-  <h1>🧾 Éditeur de PKPass (100% Frontend)</h1>
-  <p>Charge un fichier `.pkpass`, modifie les champs, puis télécharge ta version personnalisée sans aucun serveur.</p>
+  <h1>🎟️ Éditeur complet de PKPass (Frontend only)</h1>
+  <p>Importe un fichier .pkpass, modifie tous les champs y compris imbriqués, puis télécharge une version mise à jour.</p>
 
   <input type="file" id="fileInput" accept=".pkpass" />
   <div id="form-area"></div>
-  <button id="downloadBtn" style="display:none">📦 Télécharger le nouveau PKPass</button>
+  <button id="downloadBtn" style="display:none">📦 Télécharger PKPass modifié</button>
 
   <script>
     let zip, originalZipContent = {};
     let passJson = {};
-    
+
     document.getElementById("fileInput").addEventListener("change", async function (e) {
       const file = e.target.files[0];
       if (!file || !file.name.endsWith(".pkpass")) {
@@ -77,7 +77,6 @@
         return;
       }
 
-      // Stocker tous les fichiers d’origine
       for (const filename in zip.files) {
         if (filename !== "pass.json") {
           originalZipContent[filename] = await zip.files[filename].async("uint8array");
@@ -89,29 +88,51 @@
       buildForm(passJson);
     });
 
-    function buildForm(data) {
+    function buildForm(data, parentKey = "") {
       const formArea = document.getElementById("form-area");
       formArea.innerHTML = '<h2>✏️ Modifier le contenu</h2>';
-      for (const key in data) {
-        if (typeof data[key] === "string") {
-          const field = document.createElement("div");
-          field.className = "field";
-          field.innerHTML = `
-            <label for="${key}">${key}</label>
-            <input type="text" name="${key}" id="${key}" value="${data[key]}" />
-          `;
-          formArea.appendChild(field);
+
+      function createInput(key, value, path) {
+        const id = path.join(".");
+        const field = document.createElement("div");
+        field.className = "field";
+        field.innerHTML = \`
+          <label for="\${id}">\${id}</label>
+          <input type="text" name="\${id}" id="\${id}" value="\${value}" />
+        \`;
+        formArea.appendChild(field);
+      }
+
+      function recurse(obj, path = []) {
+        for (const key in obj) {
+          const value = obj[key];
+          if (typeof value === "string" || typeof value === "number") {
+            createInput(key, value, [...path, key]);
+          } else if (typeof value === "object" && value !== null) {
+            recurse(value, [...path, key]);
+          }
         }
       }
+
+      recurse(data);
       document.getElementById("downloadBtn").style.display = "inline-block";
     }
 
     document.getElementById("downloadBtn").addEventListener("click", async () => {
-      // Mettre à jour pass.json avec les champs modifiés
-      for (const key in passJson) {
-        const input = document.getElementById(key);
-        if (input) passJson[key] = input.value;
+      function updateJson(obj, path = []) {
+        for (const key in obj) {
+          const value = obj[key];
+          const id = [...path, key].join(".");
+          const input = document.getElementById(id);
+          if (input) {
+            obj[key] = input.value;
+          } else if (typeof value === "object" && value !== null) {
+            updateJson(value, [...path, key]);
+          }
+        }
       }
+
+      updateJson(passJson);
 
       const newZip = new JSZip();
       newZip.file("pass.json", JSON.stringify(passJson, null, 2));
